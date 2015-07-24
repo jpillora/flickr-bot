@@ -114,7 +114,9 @@ func main() {
 			log.Printf("Moving photos from %s...", src.Title)
 			for i, photo := range src.Photos {
 				_, err = user.Do("flickr.photosets.addphoto", flickr.Args{"photoset_id": dest.ID, "photo_id": photo.ID})
-				check(err)
+				if err != nil && err.Error() != "Photo already in set" {
+					check(err)
+				}
 				_, err = user.Do("flickr.photosets.removephoto", flickr.Args{"photoset_id": src.ID, "photo_id": photo.ID})
 				check(err)
 				log.Printf("Moved photo %d", i+1)
