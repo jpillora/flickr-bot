@@ -19,10 +19,19 @@ type Config struct {
 		Method string   `type:"arg"`
 		Args   []string `type:"args"`
 	}
-	GetToken  struct{}
-	Photosets struct{}
+	GetToken struct{}
+	PhotoSet struct {
+		ID string `type:"arg"`
+	}
+	PhotoSets struct{}
 	Photos    struct {
 		Set string `type:"arg"`
+	}
+	PhotoList struct {
+		Set string `type:"arg"`
+	}
+	PhotoSizes struct {
+		ID string `type:"arg"`
 	}
 	Merge struct {
 		Dest    string   `type:"arg"`
@@ -35,7 +44,11 @@ type Config struct {
 }
 
 func main() {
-	conf := Config{}
+	conf := Config{
+		API:    "",
+		Secret: "",
+		Token:  "",
+	}
 	opts.Parse(&conf)
 
 	client := flickr.New(conf.API, conf.Secret)
@@ -63,8 +76,8 @@ func main() {
 		} else {
 			user.Test(conf.Run.Method, args)
 		}
-	//===================================
-	case "gettoken":
+		//===================================
+	case "get-token":
 		frob, url, err := client.GetAuthURL()
 		if err != nil {
 			log.Fatal(err)
@@ -84,8 +97,8 @@ func main() {
 			log.Fatal("Timeout")
 		}
 		log.Printf("Authenticated as %s with token:\n\n=> %s", user.Fullname, user.Token)
-	//===================================
-	case "photosets":
+		//===================================
+	case "photo-sets":
 		if user == nil {
 			log.Fatal("Token required")
 		}
@@ -94,12 +107,51 @@ func main() {
 		for i, s := range sets {
 			log.Printf("%s #%03d %50s (%04d photos)", s.ID, i+1, s.Title, s.CountPhotos)
 		}
+		//===================================
+	case "photo-set":
+		if user == nil {
+			log.Fatal("Token required")
+		}
+		set, err := user.Photoset(conf.PhotoSet.ID)
+		check(err)
+		log.Printf("%+v", set)
 	//===================================
 	case "photos":
 		if user == nil {
 			log.Fatal("Token required")
 		}
 		user.Test("flickr.photosets.getInfo", flickr.Args{"photoset_id": conf.Photos.Set})
+		//===================================
+	case "photo-sizes":
+		if user == nil {
+			log.Fatal("Token required")
+		}
+		// go run main.go photo-sizes 14238614047
+		user.Test("flickr.photos.getSizes", flickr.Args{"photo_id": conf.PhotoSizes.ID})
+		//===================================
+	case "photo-list":
+		if user == nil {
+			log.Fatal("Token required")
+		}
+		s, err := user.Photoset(conf.PhotoList.Set)
+		check(err)
+		err = user.GetPhotos(s)
+		check(err)
+
+		photos := s.Photos
+		if len(photos) > 3 {
+			photos = photos[:3]
+		}
+		for _, p := range photos {
+			log.Printf("photo: %+v", p)
+			log.Printf("source: https://farm%d.staticflickr.com/%s/%s_%s_o.jpg", p.Farm, p.Server, p.ID, p.Secret)
+			log.Printf("get sizes...")
+			sizes, err := user.PhotoSizes(p.ID)
+			check(err)
+			for _, s := range sizes.Sizes {
+				log.Printf("%s = %s", s.Label, s.Source)
+			}
+		}
 	//===================================
 	case "merge":
 		if user == nil {
@@ -122,8 +174,8 @@ func main() {
 				log.Printf("Moved photo %d", i+1)
 			}
 		}
-	//===================================
-	case "mergematch":
+		//===================================
+	case "merge-match":
 		if user == nil {
 			log.Fatal("Token required")
 		}
@@ -141,10 +193,11 @@ func main() {
 			if !re.MatchString(string(src.Title)) {
 				continue
 			}
-			err = user.LoadPhotos(src)
+			err = user.GetPhotos(src)
 			check(err)
 			log.Printf("Moving photos from %s...", src.Title)
 			for i, photo := range src.Photos {
+
 				log.Printf("Moving photo %d (%s)...", i+1, photo.ID)
 				_, err = user.Do("flickr.photosets.addphoto", flickr.Args{"photoset_id": dest.ID, "photo_id": photo.ID})
 				if err != nil && err.Error() != "Photo already in set" {

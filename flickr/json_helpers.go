@@ -1,6 +1,10 @@
 package flickr
 
-import "encoding/json"
+import (
+	"bytes"
+	"encoding/json"
+	"log"
+)
 
 type Content string
 
@@ -21,4 +25,12 @@ func (c *Content) UnmarshalJSON(b []byte) error {
 	}
 	*c = Content(str)
 	return nil
+}
+
+func printjson(b []byte) {
+	pretty := bytes.Buffer{}
+	if err := json.Indent(&pretty, b, "", "  "); err != nil {
+		log.Fatalf("Invalid JSON: %s", err)
+	}
+	log.Println(pretty.String())
 }

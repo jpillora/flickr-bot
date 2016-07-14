@@ -1,35 +1,9 @@
 package flickr
 
-import "encoding/json"
-
-func (u *User) Photoset(id string) (*PhotoSet, error) {
-	b, err := u.Do("flickr.photosets.getInfo", Args{"photoset_id": id})
-	if err != nil {
-		return nil, err
-	}
-	resp := PhotosetResponse{}
-	if err := json.Unmarshal(b, &resp); err != nil {
-		return nil, err
-	}
-
-	set := resp.Data
-	if err := u.LoadPhotos(set); err != nil {
-		return nil, err
-	}
-	return set, nil
-}
-
-func (u *User) Photosets() ([]*PhotoSet, error) {
-	b, err := u.Do("flickr.photosets.getList", nil)
-	if err != nil {
-		return nil, err
-	}
-	resp := PhotoSetsResponse{}
-	if err := json.Unmarshal(b, &resp); err != nil {
-		return nil, err
-	}
-	return resp.Data.Photosets, nil
-}
+import (
+	"encoding/json"
+	"strconv"
+)
 
 type PhotoSetsResponse struct {
 	Data struct {
@@ -67,14 +41,70 @@ type PhotoSet struct {
 	VisibilityCanSeeSet int      `json:"visibility_can_see_set"`
 }
 
-func (u *User) LoadPhotos(photoset *PhotoSet) error {
-	b, err := u.Do("flickr.photosets.getPhotos", Args{"photoset_id": photoset.ID})
+func (u *User) Photoset(id string) (*PhotoSet, error) {
+	b, err := u.Do("flickr.photosets.getInfo", Args{"photoset_id": id})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	resp := PhotosetResponse{Data: photoset}
+	resp := PhotosetResponse{}
 	if err := json.Unmarshal(b, &resp); err != nil {
-		return err
+		return nil, err
+	}
+	set := resp.Data
+	if err := u.GetPhotos(set); err != nil {
+		return nil, err
+	}
+	return set, nil
+}
+
+func (u *User) Photosets() ([]*PhotoSet, error) {
+	b, err := u.Do("flickr.photosets.getList", nil)
+	if err != nil {
+		return nil, err
+	}
+	resp := PhotoSetsResponse{}
+	if err := json.Unmarshal(b, &resp); err != nil {
+		return nil, err
+	}
+	return resp.Data.Photosets, nil
+}
+
+type GetPhotos struct {
+	ID        string   `json:"id"`
+	Primary   string   `json:"primary"`
+	Owner     string   `json:"owner"`
+	Ownername string   `json:"ownername"`
+	Photos    []*Photo `json:"photo"`
+	Page      string   `json:"page"`
+	PerPage   int      `json:"per_page"`
+	Perpage   int      `json:"perpage"`
+	Pages     int      `json:"pages"`
+	Total     string   `json:"total"`
+	Title     string   `json:"title"`
+}
+
+func (u *User) GetPhotos(set *PhotoSet) error {
+	page := 0
+	pages := 1
+	for page < pages {
+		page++
+		b, err := u.Do("flickr.photosets.getPhotos", Args{
+			"photoset_id": set.ID,
+			"extras":      "url_o,original_format,date_taken,media,path_alias",
+			"page":        strconv.Itoa(page),
+		})
+		if err != nil {
+			return err
+		}
+		resp := struct {
+			GetPhotos `json:"photoset"`
+		}{}
+		if err := json.Unmarshal(b, &resp); err != nil {
+			return err
+		}
+		getPhotos := resp.GetPhotos
+		set.Photos = append(set.Photos, getPhotos.Photos...)
+		pages = getPhotos.Pages
 	}
 	return nil
 }
@@ -92,13 +122,19 @@ type PhotosetResponse struct {
 // 	Total     string   `json:"total"`
 
 type Photo struct {
-	Farm      int    `json:"farm"`
-	ID        string `json:"id"`
-	Isfamily  int    `json:"isfamily"`
-	Isfriend  int    `json:"isfriend"`
-	Isprimary string `json:"isprimary"`
-	Ispublic  int    `json:"ispublic"`
-	Secret    string `json:"secret"`
-	Server    string `json:"server"`
-	Title     string `json:"title"`
+	Farm           int    `json:"farm"`
+	ID             string `json:"id"`
+	Isfamily       int    `json:"isfamily"`
+	Isfriend       int    `json:"isfriend"`
+	Isprimary      string `json:"isprimary"`
+	Ispublic       int    `json:"ispublic"`
+	Secret         string `json:"secret"`
+	Server         string `json:"server"`
+	Title          string `json:"title"`
+	DateTaken      string `json:"datetaken"`
+	OriginalURL    string `json:"url_o"`
+	OriginalSecret string `json:"originalsecret"`
+	OriginalFormat string `json:"originalformat"`
+	Media          string `json:"media"`
+	MediaState     string `json:"media_status"`
 }
